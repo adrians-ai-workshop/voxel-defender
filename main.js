@@ -774,26 +774,45 @@ function animate() {
         if (enemy.attackTimer > 0) continue;
 
         if (enemy.type === 'dragon') {
-            // Dragon attacks castle and towers
-            const castleDist = enemy.mesh.position.distanceTo(new THREE.Vector3(75.5, 1.5, 50));
-            if (castleDist < enemy.attackRange) {
-                enemy.attackTimer = enemy.attackCooldown;
-                gameState.castleHP -= enemy.attackDamage;
-                if (gameState.castleHP <= 0) {
-                    gameState.castleHP = 0;
-                    alert('The Castle has fallen! Game Over! Refresh to restart.');
-                    location.reload();
-                }
-                updateUI();
-            }
-            // Dragon also attacks nearby towers
+            // Dragon shoots fireball missiles at castle or towers
+            enemy.attackTimer = enemy.attackCooldown;
+            const mouthPos = new THREE.Vector3(0, 2.1 * enemy.size, 2.2 * enemy.size);
+            mouthPos.applyMatrix4(enemy.mesh.matrixWorld);
+
+            // Pick a target: nearest tower or castle
+            let targetPos = new THREE.Vector3(75.5, 1.5, 50);
+            let targetDamage = enemy.attackDamage;
+            let isCastleTarget = true;
+            let nearestTowerDist = enemy.attackRange;
+            let nearestTower = null;
             for (const tower of towers) {
                 const dist = enemy.mesh.position.distanceTo(tower.mesh.position);
-                if (dist < enemy.attackRange * 0.6) {
-                    tower.health -= enemy.attackDamage * 0.5;
-                    enemy.attackTimer = enemy.attackCooldown;
-                }
+                if (dist < nearestTowerDist) { nearestTowerDist = dist; nearestTower = tower; }
             }
+            if (nearestTower) {
+                targetPos = nearestTower.mesh.position.clone();
+                targetPos.y += 1.0;
+                targetDamage = Math.floor(enemy.attackDamage * 0.5);
+                isCastleTarget = false;
+            }
+
+            // Create fireball projectile
+            const fireballGroup = new THREE.Group();
+            const core = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff4500 }));
+            fireballGroup.add(core);
+            const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.5 }));
+            fireballGroup.add(glow);
+            const innerGlow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffcc00 }));
+            fireballGroup.add(innerGlow);
+            fireballGroup.position.copy(mouthPos);
+            scene.add(fireballGroup);
+
+            projectiles.push({
+                mesh: fireballGroup, target: isCastleTarget ? null : nearestTower,
+                targetPos: targetPos.clone(), damage: targetDamage, speed: 15,
+                splash: false, slow: false, isHoming: false, isArrow: false,
+                isSkyCannon: false, isDragonFireball: true, isCastleTarget: isCastleTarget
+            });
         } else if (enemy.attackType === 'melee') {
             for (const tower of towers) {
                 const dist = enemy.mesh.position.distanceTo(tower.mesh.position);
@@ -852,7 +871,9 @@ function animate() {
         }
 
         let targetPos;
-        if (p.isEnemyProjectile && p.target && towers.includes(p.target)) {
+        if (p.isDragonFireball) {
+            targetPos = p.targetPos;
+        } else if (p.isEnemyProjectile && p.target && towers.includes(p.target)) {
             targetPos = p.target.mesh.position.clone(); targetPos.y += 1.0;
         } else if (p.isHoming && enemies.includes(p.target)) {
             targetPos = p.target.mesh.position.clone(); targetPos.y += p.target.size * 0.8;
@@ -865,7 +886,19 @@ function animate() {
         const moveDist = p.speed * delta;
 
         if (dist < moveDist + 0.3) {
-            if (p.isEnemyProjectile) {
+            if (p.isDragonFireball) {
+                if (p.isCastleTarget) {
+                    gameState.castleHP -= p.damage;
+                    if (gameState.castleHP <= 0) {
+                        gameState.castleHP = 0;
+                        alert('The Castle has fallen! Game Over! Refresh to restart.');
+                        location.reload();
+                    }
+                    updateUI();
+                } else if (p.target && towers.includes(p.target)) {
+                    p.target.health -= p.damage;
+                }
+            } else if (p.isEnemyProjectile) {
                 if (p.target && towers.includes(p.target)) p.target.health -= p.damage;
             } else {
                 if (enemies.includes(p.target)) {
@@ -883,7 +916,7 @@ function animate() {
         } else {
             dir.normalize();
             p.mesh.position.add(dir.multiplyScalar(moveDist));
-            if (p.isArrow) p.mesh.lookAt(targetPos);
+            if (p.isArrow || p.isDragonFireball) p.mesh.lookAt(targetPos);
         }
     }
 
