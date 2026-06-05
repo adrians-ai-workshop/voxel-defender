@@ -6,7 +6,7 @@ const CELL_SIZE = 1;
 
 // --- Game State ---
 const gameState = {
-    gold: 200,
+    gold: 500,
     lives: 20,
     wave: 1,
     isWaveActive: false,
@@ -342,7 +342,7 @@ function resetGame() {
     towers.length = 0;
     for (const p of projectiles) scene.remove(p.mesh);
     projectiles.length = 0;
-    gameState.gold = 200;
+    gameState.gold = 500;
     gameState.lives = 20;
     gameState.wave = 1;
     gameState.isWaveActive = false;
@@ -540,13 +540,13 @@ function getDragonLevel(wave) {
 function spawnEnemy() {
     const wave = gameState.wave;
     let type = 'orc';
-    let hp = 30 + wave * 5;
-    let speed = 3 + wave * 0.1;
-    let reward = 5;
+    let hp = 20 + wave * 3;
+    let speed = 2.5 + wave * 0.08;
+    let reward = 8;
     let color = materials.green;
 
-    if (wave >= 3 && Math.random() < 0.4) { type = 'skeleton'; hp = 50 + wave * 8; speed = 4; reward = 10; color = materials.white; }
-    if (wave >= 5 && Math.random() < 0.2) { type = 'wizard'; hp = 120 + wave * 15; speed = 2.5; reward = 25; color = materials.purple; }
+    if (wave >= 3 && Math.random() < 0.4) { type = 'skeleton'; hp = 35 + wave * 5; speed = 3.5; reward = 15; color = materials.white; }
+    if (wave >= 5 && Math.random() < 0.2) { type = 'wizard'; hp = 80 + wave * 10; speed = 2.2; reward = 30; color = materials.purple; }
     if (wave >= 8 && gameState.enemiesRemainingToSpawn === 1) { type = 'dragon'; const dl = getDragonLevel(wave); hp = dl.hp; speed = 2 + wave * 0.05; reward = 100; color = dl.color; }
 
     const enemyGroup = new THREE.Group();
@@ -599,9 +599,9 @@ function spawnEnemy() {
     scene.add(enemyGroup);
 
     let attackRange = 0, attackDamage = 0, attackCooldown = 0, attackType = 'none';
-    if (type === 'orc') { attackRange = 1.5; attackDamage = 8 + wave*2; attackCooldown = 1.5; attackType = 'melee'; }
-    else if (type === 'skeleton') { attackRange = 12; attackDamage = 5 + wave; attackCooldown = 2.0; attackType = 'ranged'; }
-    else if (type === 'wizard') { attackRange = 10; attackDamage = 12 + wave*2; attackCooldown = 3.0; attackType = 'spell'; }
+    if (type === 'orc') { attackRange = 1.5; attackDamage = 5 + wave; attackCooldown = 1.5; attackType = 'melee'; }
+    else if (type === 'skeleton') { attackRange = 12; attackDamage = 3 + Math.floor(wave * 0.5); attackCooldown = 2.0; attackType = 'ranged'; }
+    else if (type === 'wizard') { attackRange = 10; attackDamage = 8 + wave; attackCooldown = 3.0; attackType = 'spell'; }
     else if (type === 'dragon') {
         const dl = getDragonLevel(wave);
         attackRange = 25; attackDamage = dl.damage; attackCooldown = Math.max(1.5, 4.0 - wave*0.2); attackType = 'dragon_fire';
