@@ -330,12 +330,43 @@ document.body.appendChild(towerBar);
 const splashScreen = document.getElementById('splash-screen');
 const pauseScreen = document.getElementById('pause-screen');
 
-splashScreen.addEventListener('click', () => {
+function resetGame() {
+    // Clear enemies
+    for (const enemy of enemies) {
+        scene.remove(enemy.mesh);
+    }
+    enemies.length = 0;
+    
+    // Clear towers
+    for (const tower of towers) {
+        scene.remove(tower.mesh);
+    }
+    towers.length = 0;
+    
+    // Clear projectiles
+    for (const p of projectiles) {
+        scene.remove(p.mesh);
+    }
+    projectiles.length = 0;
+    
+    // Reset game state
+    gameState.gold = 150;
+    gameState.lives = 20;
+    gameState.wave = 1;
+    gameState.isWaveActive = false;
+    gameState.enemiesRemainingToSpawn = 0;
+    gameState.spawnTimer = 0;
     gameState.isStarted = true;
+    gameState.isPaused = false;
+    
+    updateUI();
+}
+
+splashScreen.addEventListener('click', () => {
+    resetGame();
     splashScreen.style.display = 'none';
     uiContainer.style.display = 'block';
     towerBar.style.display = 'flex';
-    updateUI();
 });
 
 window.addEventListener('blur', () => {
@@ -1099,5 +1130,61 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// --- Demo Spawning: Spawn one of each enemy type immediately for splash screen testing ---
+function spawnDemoEnemy(type) {
+    const enemyGroup = new THREE.Group();
+    const s = type === 'dragon' ? 1.8 : 1;
+    let color = materials.green;
+    if (type === 'skeleton') color = materials.white;
+    if (type === 'wizard') color = materials.purple;
+    if (type === 'dragon') color = materials.red;
+
+    if (type === 'orc') {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.7 * s, 0.8 * s, 0.6 * s), color);
+        body.position.y = 0.8 * s; body.castShadow = true; enemyGroup.add(body);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5 * s, 0.45 * s, 0.5 * s), color);
+        head.position.y = 1.45 * s; head.castShadow = true; enemyGroup.add(head);
+    } else if (type === 'skeleton') {
+        const ribcage = new THREE.Mesh(new THREE.BoxGeometry(0.55 * s, 0.6 * s, 0.35 * s), materials.white);
+        ribcage.position.y = 0.9 * s; ribcage.castShadow = true; enemyGroup.add(ribcage);
+        const skull = new THREE.Mesh(new THREE.BoxGeometry(0.4 * s, 0.4 * s, 0.4 * s), materials.white);
+        skull.position.y = 1.4 * s; skull.castShadow = true; enemyGroup.add(skull);
+    } else if (type === 'wizard') {
+        const robe = new THREE.Mesh(new THREE.BoxGeometry(0.6 * s, 1.0 * s, 0.6 * s), color);
+        robe.position.y = 0.65 * s; robe.castShadow = true; enemyGroup.add(robe);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.35 * s, 0.35 * s, 0.35 * s), materials.skin);
+        head.position.y = 1.32 * s; head.castShadow = true; enemyGroup.add(head);
+    } else if (type === 'dragon') {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.2 * s, 1.0 * s, 2.0 * s), color);
+        body.position.y = 1.5 * s; body.castShadow = true; enemyGroup.add(body);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.7 * s, 0.6 * s, 0.9 * s), color);
+        head.position.set(0, 2.2 * s, 1.7 * s); head.castShadow = true; enemyGroup.add(head);
+        const wingGeo = new THREE.BoxGeometry(1.5 * s, 0.1 * s, 1.2 * s);
+        const wingMat = new THREE.MeshLambertMaterial({ color: 0xb71c1c });
+        const wingL = new THREE.Mesh(wingGeo, wingMat); wingL.position.set(-1.4 * s, 2.0 * s, 0); wingL.rotation.z = 0.15; wingL.castShadow = true; enemyGroup.add(wingL);
+        const wingR = new THREE.Mesh(wingGeo, wingMat); wingR.position.set(1.4 * s, 2.0 * s, 0); wingR.rotation.z = -0.15; wingR.castShadow = true; enemyGroup.add(wingR);
+    }
+
+    enemyGroup.position.copy(waypoints[0]);
+    enemyGroup.position.y = type === 'dragon' ? 12 : 0;
+    scene.add(enemyGroup);
+
+    enemies.push({
+        mesh: enemyGroup, hpBar: null,
+        hp: 100, maxHp: 100,
+        speed: 2, baseSpeed: 2,
+        reward: 0,
+        waypointIndex: 0,
+        slowTimer: 0,
+        size: s, type: type,
+        attackRange: 0, attackDamage: 0, attackCooldown: 0, attackTimer: 0, attackType: 'none'
+    });
+}
+
+spawnDemoEnemy('orc');
+spawnDemoEnemy('skeleton');
+spawnDemoEnemy('wizard');
+spawnDemoEnemy('dragon');
 
 animate();
