@@ -893,7 +893,9 @@ function animate() {
             enemy.mesh.lookAt(new THREE.Vector3(targetWp.x, enemy.mesh.position.y, targetWp.z));
         }
 
-        enemy.hpBar.scale.x = Math.max(0, enemy.hp / enemy.maxHp);
+        if (enemy.hpBar) {
+            enemy.hpBar.scale.x = Math.max(0, enemy.hp / enemy.maxHp);
+        }
     }
 
     towers.forEach(tower => {
