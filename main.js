@@ -783,19 +783,16 @@ function animate() {
             const forward = new THREE.Vector3();
             enemy.mesh.getWorldDirection(forward);
 
-            // Create fireball projectile
-            const fireballGroup = new THREE.Group();
-            const core = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff4500 }));
-            fireballGroup.add(core);
-            const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.5 }));
-            fireballGroup.add(glow);
-            const innerGlow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffcc00 }));
-            fireballGroup.add(innerGlow);
-            fireballGroup.position.copy(mouthPos);
-            scene.add(fireballGroup);
+            // Create fireball projectile - single voxel ball
+            const fireballMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.5, 0.5, 0.5),
+                new THREE.MeshBasicMaterial({ color: 0xff4500 })
+            );
+            fireballMesh.position.copy(mouthPos);
+            scene.add(fireballMesh);
 
             projectiles.push({
-                mesh: fireballGroup,
+                mesh: fireballMesh,
                 velocity: forward.multiplyScalar(25),
                 damage: enemy.attackDamage,
                 life: 4.0,
@@ -850,33 +847,34 @@ function animate() {
                 continue;
             }
             
-            // Emit particles from fireball
+            // Emit small voxel particles from fireball
             p.particlesTimer -= delta;
             if (p.particlesTimer <= 0) {
-                p.particlesTimer = 0.05;
-                for (let f = 0; f < 3; f++) {
-                    const fireGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-                    const fireColors = [0xff4500, 0xff6600, 0xff8800, 0xffaa00, 0xffcc00];
+                p.particlesTimer = 0.04;
+                for (let f = 0; f < 2; f++) {
+                    const size = 0.08 + Math.random() * 0.12;
+                    const fireGeo = new THREE.BoxGeometry(size, size, size);
+                    const fireColors = [0xff4500, 0xff6600, 0xff8800, 0xffaa00, 0xffcc00, 0xffdd00];
                     const fireMat = new THREE.MeshBasicMaterial({
                         color: fireColors[Math.floor(Math.random() * fireColors.length)],
                         transparent: true,
-                        opacity: 0.9
+                        opacity: 0.85
                     });
                     const fireMesh = new THREE.Mesh(fireGeo, fireMat);
                     fireMesh.position.copy(p.mesh.position);
-                    fireMesh.position.x += (Math.random() - 0.5) * 0.4;
-                    fireMesh.position.y += (Math.random() - 0.5) * 0.4;
-                    fireMesh.position.z += (Math.random() - 0.5) * 0.4;
+                    fireMesh.position.x += (Math.random() - 0.5) * 0.3;
+                    fireMesh.position.y += (Math.random() - 0.5) * 0.3;
+                    fireMesh.position.z += (Math.random() - 0.5) * 0.3;
                     scene.add(fireMesh);
                     fireParticles.push({
                         mesh: fireMesh,
                         velocity: new THREE.Vector3(
-                            (Math.random() - 0.5) * 3,
-                            (Math.random() - 0.5) * 3,
-                            (Math.random() - 0.5) * 3
+                            (Math.random() - 0.5) * 2,
+                            Math.random() * 1.5,
+                            (Math.random() - 0.5) * 2
                         ),
-                        life: 0.3 + Math.random() * 0.3,
-                        maxLife: 0.3 + Math.random() * 0.3
+                        life: 0.4 + Math.random() * 0.4,
+                        maxLife: 0.4 + Math.random() * 0.4
                     });
                 }
             }
