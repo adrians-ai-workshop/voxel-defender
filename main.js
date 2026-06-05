@@ -151,6 +151,25 @@ function playSound(type) {
     }
 }
 
+// --- Wave Start Musical Sting ---
+function playWaveSting() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    const notes = [261.63, 329.63, 392.00, 523.25];
+    notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + i * 0.1);
+        gain.gain.setValueAtTime(0.06, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.25);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.25);
+    });
+}
+
 // --- Game Constants ---
 const GRID_SIZE = 80;
 const CELL_SIZE = 1;
@@ -163,7 +182,7 @@ const gameState = {
     isWaveActive: false,
     enemiesRemainingToSpawn: 0,
     spawnTimer: 0,
-    spawnInterval: 1.5,
+    spawnInterval: 1.0,
     isStarted: false,
     isPaused: false,
     castleHP: 1000,
@@ -505,67 +524,12 @@ function resetGame() {
     updateUI();
 }
 
-// --- Background Music (procedural chiptune loop) ---
-let bgMusicStarted = false;
-let bgMusicInterval = null;
-
-function startBackgroundMusic() {
-    if (bgMusicStarted) return;
-    bgMusicStarted = true;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-
-    // Simple chord progression: C, Am, F, G (each 2 beats, 8 beats total loop)
-    // Notes in Hz: C4=261.63, E4=329.63, G4=392.00, A4=440.00, C5=523.25, F4=349.23, G3=196.00
-    const chords = [
-        // C major: C, E, G
-        [261.63, 329.63, 392.00],
-        // A minor: A, C, E
-        [220.00, 261.63, 329.63],
-        // F major: F, A, C
-        [174.61, 220.00, 261.63],
-        // G major: G, B, D
-        [196.00, 246.94, 293.66]
-    ];
-
-    const beatDuration = 0.35; // seconds per beat
-    const beatsPerChord = 4;
-    const loopDuration = chords.length * beatsPerChord * beatDuration;
-
-    function playChord(chordIndex, startTime) {
-        const chord = chords[chordIndex];
-        chord.forEach(freq => {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(freq, startTime);
-            gain.gain.setValueAtTime(0.03, startTime);
-            gain.gain.setValueAtTime(0.03, startTime + beatsPerChord * beatDuration - 0.05);
-            gain.gain.exponentialRampToValueAtTime(0.001, startTime + beatsPerChord * beatDuration);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(startTime);
-            osc.stop(startTime + beatsPerChord * beatDuration);
-        });
-    }
-
-    function scheduleLoop() {
-        const now = audioCtx.currentTime;
-        chords.forEach((_, i) => {
-            playChord(i, now + i * beatsPerChord * beatDuration);
-        });
-    }
-
-    scheduleLoop();
-    bgMusicInterval = setInterval(scheduleLoop, loopDuration * 1000);
-}
-
 splashScreen.addEventListener('click', () => {
     resetGame();
     splashScreen.style.display = 'none';
     uiContainer.style.display = 'block';
     towerBar.style.display = 'flex';
     playSound('click');
-    startBackgroundMusic();
 });
 window.addEventListener('blur', () => {
     if (gameState.isStarted && !gameState.isPaused) { gameState.isPaused = true; pauseScreen.style.display = 'flex'; }
@@ -741,14 +705,14 @@ function getDragonLevel(wave) {
 function spawnEnemy() {
     const wave = gameState.wave;
     let type = 'orc';
-    let hp = 25 + wave * 4;
-    let speed = 2.8 + wave * 0.09;
-    let reward = 8;
+    let hp = 40 + wave * 8;
+    let speed = 3.2 + wave * 0.12;
+    let reward = 10;
     let color = materials.green;
 
-    if (wave >= 3 && Math.random() < 0.4) { type = 'skeleton'; hp = 42 + wave * 6; speed = 3.8; reward = 15; color = materials.white; }
-    if (wave >= 5 && Math.random() < 0.2) { type = 'wizard'; hp = 100 + wave * 12; speed = 2.4; reward = 30; color = materials.purple; }
-    if (wave >= 8 && gameState.enemiesRemainingToSpawn === 1) { type = 'dragon'; const dl = getDragonLevel(wave); hp = dl.hp; speed = 2 + wave * 0.05; reward = 100; color = dl.color; }
+    if (wave >= 2 && Math.random() < 0.5) { type = 'skeleton'; hp = 60 + wave * 10; speed = 4.0; reward = 15; color = materials.white; }
+    if (wave >= 4 && Math.random() < 0.35) { type = 'wizard'; hp = 120 + wave * 18; speed = 2.8; reward = 30; color = materials.purple; }
+    if (wave >= 6 && gameState.enemiesRemainingToSpawn === 1) { type = 'dragon'; const dl = getDragonLevel(wave); hp = dl.hp; speed = 2.5 + wave * 0.08; reward = 100; color = dl.color; }
 
     const enemyGroup = new THREE.Group();
     const size = type === 'dragon' ? 1.8 : 1;
@@ -799,12 +763,12 @@ function spawnEnemy() {
     scene.add(enemyGroup);
 
     let attackRange = 0, attackDamage = 0, attackCooldown = 0, attackType = 'none';
-    if (type === 'orc') { attackRange = 1.5; attackDamage = 6 + Math.floor(wave * 1.5); attackCooldown = 1.5; attackType = 'melee'; }
-    else if (type === 'skeleton') { attackRange = 12; attackDamage = 4 + Math.floor(wave * 0.75); attackCooldown = 2.0; attackType = 'ranged'; }
-    else if (type === 'wizard') { attackRange = 10; attackDamage = 10 + Math.floor(wave * 1.5); attackCooldown = 3.0; attackType = 'spell'; }
+    if (type === 'orc') { attackRange = 1.5; attackDamage = 10 + Math.floor(wave * 2.5); attackCooldown = 1.0; attackType = 'melee'; }
+    else if (type === 'skeleton') { attackRange = 14; attackDamage = 8 + Math.floor(wave * 1.5); attackCooldown = 1.5; attackType = 'ranged'; }
+    else if (type === 'wizard') { attackRange = 12; attackDamage = 18 + Math.floor(wave * 2.5); attackCooldown = 2.0; attackType = 'spell'; }
     else if (type === 'dragon') {
         const dl = getDragonLevel(wave);
-        attackRange = 25; attackDamage = dl.damage; attackCooldown = Math.max(1.5, 4.0 - wave*0.2); attackType = 'dragon_fire';
+        attackRange = 25; attackDamage = dl.damage; attackCooldown = Math.max(1.0, 3.0 - wave*0.15); attackType = 'dragon_fire';
     }
 
     let dragonFlightTarget = null;
@@ -865,8 +829,9 @@ function animate() {
     if (!gameState.isWaveActive && gameState.enemiesRemainingToSpawn === 0 && enemies.length === 0) {
         if (time % 5 < 0.02 || gameState.wave === 1) {
             gameState.isWaveActive = true;
-            gameState.enemiesRemainingToSpawn = 5 + Math.floor(gameState.wave * 1.5);
+            gameState.enemiesRemainingToSpawn = 8 + Math.floor(gameState.wave * 3);
             playSound('waveStart');
+            playWaveSting();
         }
     }
     if (gameState.isWaveActive && gameState.enemiesRemainingToSpawn > 0) {
@@ -875,9 +840,8 @@ function animate() {
     } else if (gameState.isWaveActive && gameState.enemiesRemainingToSpawn === 0 && enemies.length === 0) {
         gameState.isWaveActive = false;
         gameState.wave++;
-        gameState.gold += 50;
+        gameState.gold += 30;
         updateUI();
-        playSound('waveStart');
     }
 
     // Update enemies
