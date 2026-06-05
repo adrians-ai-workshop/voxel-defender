@@ -899,6 +899,59 @@ function animate() {
     castleHpBar.scale.x = castleHpRatio;
     castleHpBar.material.color.setHex(castleHpRatio > 0.5 ? 0x4caf50 : (castleHpRatio > 0.25 ? 0xff9800 : 0xf44336));
 
+    // Demo dragon fire breathing
+    for (const enemy of enemies) {
+        if (enemy.isDemo && enemy.type === 'dragon') {
+            // Emit fire particles from dragon mouth
+            const mouthPos = new THREE.Vector3(0, 2.1 * enemy.size, 2.2 * enemy.size);
+            mouthPos.applyMatrix4(enemy.mesh.matrixWorld);
+            for (let f = 0; f < 3; f++) {
+                const fireGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+                const fireColors = [0xff4500, 0xff6600, 0xff8800, 0xffaa00, 0xffcc00];
+                const fireMat = new THREE.MeshBasicMaterial({
+                    color: fireColors[Math.floor(Math.random() * fireColors.length)],
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const fireMesh = new THREE.Mesh(fireGeo, fireMat);
+                fireMesh.position.copy(mouthPos);
+                fireMesh.position.x += (Math.random() - 0.5) * 0.3;
+                fireMesh.position.y += (Math.random() - 0.5) * 0.3;
+                fireMesh.position.z += (Math.random() - 0.5) * 0.3;
+                scene.add(fireMesh);
+                fireParticles.push({
+                    mesh: fireMesh,
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 2,
+                        (Math.random() - 0.5) * 2 - 1,
+                        3 + Math.random() * 3
+                    ),
+                    life: 0.5 + Math.random() * 0.5,
+                    maxLife: 0.5 + Math.random() * 0.5
+                });
+            }
+        }
+    }
+
+    // Update fire particles
+    for (let i = fireParticles.length - 1; i >= 0; i--) {
+        const fp = fireParticles[i];
+        fp.life -= delta;
+        if (fp.life <= 0) {
+            scene.remove(fp.mesh);
+            fp.mesh.geometry.dispose();
+            fp.mesh.material.dispose();
+            fireParticles.splice(i, 1);
+            continue;
+        }
+        fp.mesh.position.add(fp.velocity.clone().multiplyScalar(delta));
+        fp.velocity.y -= 2 * delta; // gravity
+        const ratio = fp.life / fp.maxLife;
+        fp.mesh.material.opacity = ratio * 0.9;
+        const scale = ratio;
+        fp.mesh.scale.set(scale, scale, scale);
+    }
+
     renderer.render(scene, camera);
 }
 
@@ -916,6 +969,8 @@ window.addEventListener('resize', () => {
 });
 
 // --- Demo Spawning ---
+const fireParticles = [];
+
 function spawnDemoEnemy(type) {
     const enemyGroup = new THREE.Group();
     const s = type === 'dragon' ? 1.8 : 1;
@@ -949,7 +1004,8 @@ function spawnDemoEnemy(type) {
         mesh: enemyGroup, hpBar: null, hp: 100, maxHp: 100, speed: 2, baseSpeed: 2,
         reward: 0, waypointIndex: 0, slowTimer: 0, size: s, type: type,
         attackRange: 0, attackDamage: 0, attackCooldown: 0, attackTimer: 0, attackType: 'none',
-        dragonFlightTarget: null, dragonFlightTimer: 0, wingPhase: Math.random() * Math.PI * 2
+        dragonFlightTarget: null, dragonFlightTimer: 0, wingPhase: Math.random() * Math.PI * 2,
+        isDemo: true
     });
 }
 
