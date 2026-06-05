@@ -157,7 +157,7 @@ const CELL_SIZE = 1;
 
 // --- Game State ---
 const gameState = {
-    gold: 500,
+    gold: 100,
     lives: 20,
     wave: 1,
     isWaveActive: false,
@@ -493,7 +493,7 @@ function resetGame() {
     towers.length = 0;
     for (const p of projectiles) scene.remove(p.mesh);
     projectiles.length = 0;
-    gameState.gold = 500;
+    gameState.gold = 100;
     gameState.lives = 20;
     gameState.wave = 1;
     gameState.isWaveActive = false;
@@ -505,12 +505,67 @@ function resetGame() {
     updateUI();
 }
 
+// --- Background Music (procedural chiptune loop) ---
+let bgMusicStarted = false;
+let bgMusicInterval = null;
+
+function startBackgroundMusic() {
+    if (bgMusicStarted) return;
+    bgMusicStarted = true;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    // Simple chord progression: C, Am, F, G (each 2 beats, 8 beats total loop)
+    // Notes in Hz: C4=261.63, E4=329.63, G4=392.00, A4=440.00, C5=523.25, F4=349.23, G3=196.00
+    const chords = [
+        // C major: C, E, G
+        [261.63, 329.63, 392.00],
+        // A minor: A, C, E
+        [220.00, 261.63, 329.63],
+        // F major: F, A, C
+        [174.61, 220.00, 261.63],
+        // G major: G, B, D
+        [196.00, 246.94, 293.66]
+    ];
+
+    const beatDuration = 0.35; // seconds per beat
+    const beatsPerChord = 4;
+    const loopDuration = chords.length * beatsPerChord * beatDuration;
+
+    function playChord(chordIndex, startTime) {
+        const chord = chords[chordIndex];
+        chord.forEach(freq => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, startTime);
+            gain.gain.setValueAtTime(0.03, startTime);
+            gain.gain.setValueAtTime(0.03, startTime + beatsPerChord * beatDuration - 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + beatsPerChord * beatDuration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + beatsPerChord * beatDuration);
+        });
+    }
+
+    function scheduleLoop() {
+        const now = audioCtx.currentTime;
+        chords.forEach((_, i) => {
+            playChord(i, now + i * beatsPerChord * beatDuration);
+        });
+    }
+
+    scheduleLoop();
+    bgMusicInterval = setInterval(scheduleLoop, loopDuration * 1000);
+}
+
 splashScreen.addEventListener('click', () => {
     resetGame();
     splashScreen.style.display = 'none';
     uiContainer.style.display = 'block';
     towerBar.style.display = 'flex';
     playSound('click');
+    startBackgroundMusic();
 });
 window.addEventListener('blur', () => {
     if (gameState.isStarted && !gameState.isPaused) { gameState.isPaused = true; pauseScreen.style.display = 'flex'; }
