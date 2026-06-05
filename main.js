@@ -1,4 +1,4 @@
-uploimport * as THREE from 'three';
+import * as THREE from 'three';
 
 // --- Game Constants ---
 const GRID_SIZE = 80;
@@ -12,15 +12,17 @@ const gameState = {
     isWaveActive: false,
     enemiesRemainingToSpawn: 0,
     spawnTimer: 0,
-    spawnInterval: 1.5
+    spawnInterval: 1.5,
+    isStarted: false,
+    isPaused: false
 };
 
 // Camera control state (spherical coordinates)
 const cameraState = {
     target: new THREE.Vector3(10, 0, 40),
     radius: 70,
-    yaw: 0,           // Q/E rotation around Y axis
-    pitch: Math.PI / 4, // R/F tilt (0.1=flat, PI/2=top-down)
+    yaw: 0,
+    pitch: Math.PI / 4,
     speed: 30,
     rotSpeed: 1.5,
     tiltSpeed: 1.0
@@ -282,7 +284,6 @@ function handleCameraMovement(delta) {
     const rotSpeed = cameraState.rotSpeed * delta;
     const tiltSpeed = cameraState.tiltSpeed * delta;
     
-    // WASD: Move camera target (relative to yaw)
     const forwardX = -Math.sin(cameraState.yaw);
     const forwardZ = -Math.cos(cameraState.yaw);
     const rightX = Math.cos(cameraState.yaw);
@@ -305,15 +306,12 @@ function handleCameraMovement(delta) {
         cameraState.target.z += rightZ * moveSpeed;
     }
     
-    // Q/E: Rotate camera (yaw)
     if (keys['KeyQ']) cameraState.yaw -= rotSpeed;
     if (keys['KeyE']) cameraState.yaw += rotSpeed;
     
-    // R/F: Tilt camera (pitch)
     if (keys['KeyR']) cameraState.pitch = Math.min(Math.PI / 2 - 0.05, cameraState.pitch + tiltSpeed);
     if (keys['KeyF']) cameraState.pitch = Math.max(0.1, cameraState.pitch - tiltSpeed);
     
-    // Clamp to map bounds
     cameraState.target.x = Math.max(2, Math.min(GRID_SIZE - 2, cameraState.target.x));
     cameraState.target.z = Math.max(2, Math.min(GRID_SIZE - 2, cameraState.target.z));
     
@@ -322,15 +320,38 @@ function handleCameraMovement(delta) {
 
 // --- UI ---
 const uiContainer = document.createElement('div');
-uiContainer.style.cssText = 'position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.7); padding:15px; border-radius:8px; font-family:sans-serif; font-size:14px; pointer-events:none; line-height:1.6;';
+uiContainer.style.cssText = 'position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.7); padding:15px; border-radius:8px; font-family:sans-serif; font-size:14px; pointer-events:none; line-height:1.6; display:none;';
 document.body.appendChild(uiContainer);
 
 const towerBar = document.createElement('div');
-towerBar.style.cssText = 'position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:8px; pointer-events:auto;';
+towerBar.style.cssText = 'position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:none; gap:8px; pointer-events:auto;';
 document.body.appendChild(towerBar);
 
+const splashScreen = document.getElementById('splash-screen');
+const pauseScreen = document.getElementById('pause-screen');
+
+splashScreen.addEventListener('click', () => {
+    gameState.isStarted = true;
+    splashScreen.style.display = 'none';
+    uiContainer.style.display = 'block';
+    towerBar.style.display = 'flex';
+    updateUI();
+});
+
+window.addEventListener('blur', () => {
+    if (gameState.isStarted && !gameState.isPaused) {
+        gameState.isPaused = true;
+        pauseScreen.style.display = 'flex';
+    }
+});
+
+pauseScreen.addEventListener('click', () => {
+    gameState.isPaused = false;
+    pauseScreen.style.display = 'none';
+});
+
 function updateUI() {
-    uiContainer.innerHTML = `<strong>Voxel Tower Defense</strong><br>❤️ Lives: <span style="color:#ff5252">${gameState.lives}</span> | 💰 Gold: <span style="color:#ffd700">${gameState.gold}</span> | 🌊 Wave: ${gameState.wave}<br><small>WASD: Move | Q/E: Rotate | R/F: Tilt | Scroll: Zoom | Click: Place Tower | 1-4: Select</small>`;
+    uiContainer.innerHTML = `<strong>Voxel Defender</strong><br>❤️ Lives: <span style="color:#ff5252">${gameState.lives}</span> | 💰 Gold: <span style="color:#ffd700">${gameState.gold}</span> | 🌊 Wave: ${gameState.wave}<br><small>WASD: Move | Q/E: Rotate | R/F: Tilt | Scroll: Zoom | Click: Place Tower | 1-4: Select</small>`;
     towerBar.innerHTML = '';
     towerTypes.forEach((t, i) => {
         const btn = document.createElement('div');
@@ -380,6 +401,7 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
+    if (!gameState.isStarted || gameState.isPaused) return;
     if (e.button === 0 && previewMesh.visible && previewMesh.material.color.getHex() === 0x00ff00) {
         const gx = Math.round(previewMesh.position.x);
         const gz = Math.round(previewMesh.position.z);
@@ -392,21 +414,16 @@ window.addEventListener('mousedown', (e) => {
         towerGroup.position.set(gx, 0, gz);
         
         if (selectedTowerIndex === 0) {
-            // Archer Tower: wooden watchtower with villager archer
-            // Stone base platform (sits on top of grass at y=1.0)
             const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.9), new THREE.MeshLambertMaterial({ color: 0x9e9e9e }));
             base.position.y = 1.15; base.castShadow = true; towerGroup.add(base);
-            // Wooden posts (4 corners)
             const postGeo = new THREE.BoxGeometry(0.12, 1.2, 0.12);
             const postMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
             [[-0.35, 1.75, -0.35], [0.35, 1.75, -0.35], [-0.35, 1.75, 0.35], [0.35, 1.75, 0.35]].forEach(pos => {
                 const post = new THREE.Mesh(postGeo, postMat);
                 post.position.set(pos[0], pos[1], pos[2]); post.castShadow = true; towerGroup.add(post);
             });
-            // Platform floor
             const floor = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.85), new THREE.MeshLambertMaterial({ color: 0x8d6e63 }));
             floor.position.y = 2.35; towerGroup.add(floor);
-            // Railing (back and sides)
             const railGeo = new THREE.BoxGeometry(0.85, 0.25, 0.06);
             const railMat = new THREE.MeshLambertMaterial({ color: 0x6d4c41 });
             const railBack = new THREE.Mesh(railGeo, railMat);
@@ -414,44 +431,31 @@ window.addEventListener('mousedown', (e) => {
             const railSideGeo = new THREE.BoxGeometry(0.06, 0.25, 0.85);
             const railL = new THREE.Mesh(railSideGeo, railMat); railL.position.set(-0.4, 2.6, 0); towerGroup.add(railL);
             const railR = new THREE.Mesh(railSideGeo, railMat); railR.position.set(0.4, 2.6, 0); towerGroup.add(railR);
-            // Roof
             const roofGeo = new THREE.BoxGeometry(1.0, 0.08, 1.0);
             const roof = new THREE.Mesh(roofGeo, new THREE.MeshLambertMaterial({ color: 0x8b0000 }));
             roof.position.y = 2.85; roof.castShadow = true; towerGroup.add(roof);
-            // Villager archer (body)
             const vBody = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.35, 0.2), new THREE.MeshLambertMaterial({ color: 0x1976d2 }));
             vBody.position.set(0, 2.6, 0.1); towerGroup.add(vBody);
-            // Villager head
             const vHead = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshLambertMaterial({ color: 0xffcc80 }));
             vHead.position.set(0, 2.85, 0.1); towerGroup.add(vHead);
-            // Bow
             const bowGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
             const bow = new THREE.Mesh(bowGeo, new THREE.MeshLambertMaterial({ color: 0x4e342e }));
             bow.position.set(0.2, 2.65, 0.25); bow.rotation.x = 0.3; towerGroup.add(bow);
-            // Arrow nocked
             const arrowGeo = new THREE.BoxGeometry(0.02, 0.3, 0.02);
             const arrow = new THREE.Mesh(arrowGeo, new THREE.MeshLambertMaterial({ color: 0x8d6e63 }));
             arrow.position.set(0.2, 2.7, 0.35); arrow.rotation.x = 0.3; towerGroup.add(arrow);
         } else if (selectedTowerIndex === 1) {
-            // Crossbow Tower: tall stone platform with large mounted crossbow
-            // Make it very visible with larger dimensions and bright materials
             const baseMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.8 });
             const base = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 1.2), baseMat);
             base.position.y = 1.3; base.castShadow = true; towerGroup.add(base);
-            
-            // Tall corner pillars
             const pillarGeo = new THREE.BoxGeometry(0.2, 1.2, 0.2);
             const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
             [[-0.45, 1.6, -0.45], [0.45, 1.6, -0.45], [-0.45, 1.6, 0.45], [0.45, 1.6, 0.45]].forEach(pos => {
                 const pillar = new THREE.Mesh(pillarGeo, pillarMat);
                 pillar.position.set(pos[0], pos[1], pos[2]); pillar.castShadow = true; towerGroup.add(pillar);
             });
-            
-            // Upper platform floor
             const floor = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.15, 1.1), new THREE.MeshStandardMaterial({ color: 0x795548 }));
             floor.position.y = 2.25; floor.castShadow = true; towerGroup.add(floor);
-            
-            // Stone wall ring on upper platform (3 sides, open front)
             const wallMat = new THREE.MeshStandardMaterial({ color: 0x616161 });
             const wallL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 1.0), wallMat); 
             wallL.position.set(-0.48, 2.55, 0); wallL.castShadow = true; towerGroup.add(wallL);
@@ -459,106 +463,73 @@ window.addEventListener('mousedown', (e) => {
             wallR.position.set(0.48, 2.55, 0); wallR.castShadow = true; towerGroup.add(wallR);
             const wallBack = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.4, 0.15), wallMat); 
             wallBack.position.set(0, 2.55, -0.48); wallBack.castShadow = true; towerGroup.add(wallBack);
-            
-            // Crossbow stock (wooden base, much larger)
             const stock = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.8), new THREE.MeshStandardMaterial({ color: 0x4e342e }));
             stock.position.set(0, 2.45, 0.15); stock.castShadow = true; towerGroup.add(stock);
-            
-            // Crossbow bow arms (metal, large V-shape)
             const bowArmMat = new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.6, roughness: 0.4 });
             const bowArmL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.6), bowArmMat);
             bowArmL.position.set(-0.15, 2.55, 0.0); bowArmL.rotation.z = 0.7; bowArmL.castShadow = true; towerGroup.add(bowArmL);
             const bowArmR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.6), bowArmMat);
             bowArmR.position.set(0.15, 2.55, 0.0); bowArmR.rotation.z = -0.7; bowArmR.castShadow = true; towerGroup.add(bowArmR);
-            
-            // Crossbow string
             const string = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.03, 0.03), new THREE.MeshStandardMaterial({ color: 0xffffff }));
             string.position.set(0, 2.6, -0.15); towerGroup.add(string);
-            
-            // Loaded bolt/arrow on crossbow (very large and visible)
             const boltMat = new THREE.MeshStandardMaterial({ color: 0x8d6e63 });
             const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), boltMat);
             bolt.position.set(0, 2.5, 0.25); bolt.castShadow = true; towerGroup.add(bolt);
-            
-            // Bolt tip (large metal cone)
             const tip = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 4), new THREE.MeshStandardMaterial({ color: 0xb0bec5, metalness: 0.8 }));
             tip.position.set(0, 2.5, 0.65); tip.rotation.x = Math.PI / 2; towerGroup.add(tip);
-            
-            // Bolt fletching (bright red feathers)
             const fletch = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.15), new THREE.MeshStandardMaterial({ color: 0xf44336 }));
             fletch.position.set(0, 2.5, -0.05); towerGroup.add(fletch);
-            
-            // Ammo rack with extra bolts on side
             const rack = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.25), new THREE.MeshStandardMaterial({ color: 0x3e2723 }));
             rack.position.set(-0.4, 2.4, -0.35); towerGroup.add(rack);
             for (let i = 0; i < 3; i++) {
                 const extraBolt = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.5), boltMat);
                 extraBolt.position.set(-0.45 + i * 0.12, 2.48, -0.35); towerGroup.add(extraBolt);
             }
-            
-            // Large roof over the platform
             const roof = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3), new THREE.MeshStandardMaterial({ color: 0xb71c1c }));
             roof.position.y = 2.9; roof.castShadow = true; towerGroup.add(roof);
-            
-            // Bright flag on top to ensure visibility
             const flagPole = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.05), new THREE.MeshStandardMaterial({ color: 0xffffff }));
             flagPole.position.set(0.5, 3.2, -0.5); towerGroup.add(flagPole);
             const flag = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.05), new THREE.MeshStandardMaterial({ color: 0xffeb3b, emissive: 0xffeb3b, emissiveIntensity: 0.5 }));
             flag.position.set(0.7, 3.35, -0.5); towerGroup.add(flag);
-            
-            console.log("Crossbow tower built at", gx, gz);
         } else if (selectedTowerIndex === 2) {
-            // Ballista Tower: tall wooden frame with large crossbow
-            // Wooden base platform
             const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.2, 0.9), new THREE.MeshLambertMaterial({ color: 0x5d4037 }));
             base.position.y = 1.1; base.castShadow = true; towerGroup.add(base);
-            // Tall frame posts
             const frameGeo = new THREE.BoxGeometry(0.1, 1.8, 0.1);
             const frameMat = new THREE.MeshLambertMaterial({ color: 0x4e342e });
             [[-0.35, 2.0, -0.35], [0.35, 2.0, -0.35], [-0.35, 2.0, 0.35], [0.35, 2.0, 0.35]].forEach(pos => {
                 const post = new THREE.Mesh(frameGeo, frameMat); post.position.set(pos[0], pos[1], pos[2]); post.castShadow = true; towerGroup.add(post);
             });
-            // Cross beams
             const crossGeo = new THREE.BoxGeometry(0.8, 0.08, 0.08);
             const cross1 = new THREE.Mesh(crossGeo, frameMat); cross1.position.set(0, 2.5, -0.35); towerGroup.add(cross1);
             const cross2 = new THREE.Mesh(crossGeo, frameMat); cross2.position.set(0, 2.5, 0.35); towerGroup.add(cross2);
             const crossSideGeo = new THREE.BoxGeometry(0.08, 0.08, 0.8);
             const cross3 = new THREE.Mesh(crossSideGeo, frameMat); cross3.position.set(-0.35, 2.5, 0); towerGroup.add(cross3);
             const cross4 = new THREE.Mesh(crossSideGeo, frameMat); cross4.position.set(0.35, 2.5, 0); towerGroup.add(cross4);
-            // Ballista bow arms (large curved pieces)
             const armGeo = new THREE.BoxGeometry(0.08, 0.08, 0.6);
             const armMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
             const armL = new THREE.Mesh(armGeo, armMat); armL.position.set(-0.15, 2.3, 0.5); armL.rotation.x = 0.4; towerGroup.add(armL);
             const armR = new THREE.Mesh(armGeo, armMat); armR.position.set(0.15, 2.3, 0.5); armR.rotation.x = 0.4; towerGroup.add(armR);
-            // Ballista bolt (large arrow)
             const boltGeo = new THREE.BoxGeometry(0.06, 0.06, 0.8);
             const bolt = new THREE.Mesh(boltGeo, new THREE.MeshLambertMaterial({ color: 0x8d6e63 }));
             bolt.position.set(0, 2.3, 0.6); bolt.rotation.x = 0.1; towerGroup.add(bolt);
-            // Bolt tip (metal)
             const tipGeo = new THREE.ConeGeometry(0.06, 0.15, 4);
             const tip = new THREE.Mesh(tipGeo, new THREE.MeshLambertMaterial({ color: 0x757575 }));
             tip.position.set(0, 2.35, 1.0); tip.rotation.x = Math.PI / 2 + 0.1; towerGroup.add(tip);
-            // Rope/string
             const ropeGeo = new THREE.BoxGeometry(0.35, 0.03, 0.03);
             const rope = new THREE.Mesh(ropeGeo, new THREE.MeshLambertMaterial({ color: 0xd7ccc8 }));
             rope.position.set(0, 2.25, 0.35); towerGroup.add(rope);
         } else if (selectedTowerIndex === 3) {
-            // Mage Tower: magical stone tower with glowing orb
-            // Stone base (taller, cylindrical look via octagon)
             const baseGeo = new THREE.CylinderGeometry(0.45, 0.5, 1.5, 8);
             const baseMat = new THREE.MeshLambertMaterial({ color: 0x616161 });
             const base = new THREE.Mesh(baseGeo, baseMat);
             base.position.y = 1.75; base.castShadow = true; towerGroup.add(base);
-            // Stone rings (decorative)
             const ringGeo = new THREE.TorusGeometry(0.48, 0.04, 6, 12);
             const ringMat = new THREE.MeshLambertMaterial({ color: 0x424242 });
             const ring1 = new THREE.Mesh(ringGeo, ringMat); ring1.position.y = 1.3; ring1.rotation.x = Math.PI / 2; towerGroup.add(ring1);
             const ring2 = new THREE.Mesh(ringGeo, ringMat); ring2.position.y = 2.2; ring2.rotation.x = Math.PI / 2; towerGroup.add(ring2);
-            // Top platform
             const topGeo = new THREE.CylinderGeometry(0.5, 0.45, 0.15, 8);
             const top = new THREE.Mesh(topGeo, new THREE.MeshLambertMaterial({ color: 0x757575 }));
             top.position.y = 2.55; top.castShadow = true; towerGroup.add(top);
-            // Magical runes (glowing symbols on sides)
             const runeGeo = new THREE.BoxGeometry(0.08, 0.15, 0.02);
             const runeMat = new THREE.MeshBasicMaterial({ color: 0xaa00ff });
             for (let i = 0; i < 4; i++) {
@@ -568,17 +539,14 @@ window.addEventListener('mousedown', (e) => {
                 rune.rotation.y = angle;
                 towerGroup.add(rune);
             }
-            // Floating crystal/orb on top
             const orbGeo = new THREE.OctahedronGeometry(0.2, 0);
             const orbMat = new THREE.MeshBasicMaterial({ color: 0xcc00ff });
             const orb = new THREE.Mesh(orbGeo, orbMat);
             orb.position.y = 3.0; towerGroup.add(orb);
-            // Orb glow ring
             const glowRingGeo = new THREE.TorusGeometry(0.25, 0.03, 6, 16);
             const glowRingMat = new THREE.MeshBasicMaterial({ color: 0x9c27b0, transparent: true, opacity: 0.6 });
             const glowRing = new THREE.Mesh(glowRingGeo, glowRingMat);
             glowRing.position.y = 3.0; glowRing.rotation.x = Math.PI / 2; towerGroup.add(glowRing);
-            // Small floating particles (decorative crystals)
             const particleGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
             const particleMat = new THREE.MeshBasicMaterial({ color: 0xe040fb });
             [[0.3, 2.7, 0.2], [-0.25, 2.8, -0.3], [0.15, 3.0, -0.2], [-0.3, 2.6, 0.25]].forEach(pos => {
@@ -589,7 +557,6 @@ window.addEventListener('mousedown', (e) => {
         
         scene.add(towerGroup);
         
-        // Tower health bar
         const tHpBg = new THREE.Mesh(
             new THREE.PlaneGeometry(0.8, 0.1),
             new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide, depthTest: false })
@@ -744,35 +711,22 @@ function spawnEnemy() {
     hpBar.position.y = size * 3.2; hpBar.position.z = 0.01; hpBar.renderOrder = 1000; enemyGroup.add(hpBar);
 
     enemyGroup.position.copy(waypoints[0]);
-    enemyGroup.position.y = 0;
+    enemyGroup.position.y = type === 'dragon' ? 12 : 0;
     scene.add(enemyGroup);
 
-    // Enemy attack properties
     let attackRange = 0;
     let attackDamage = 0;
     let attackCooldown = 0;
-    let attackType = 'none'; // 'melee', 'ranged', 'spell', 'dragon_fire'
+    let attackType = 'none';
 
     if (type === 'orc') {
-        attackRange = 1.5;
-        attackDamage = 8 + wave * 2;
-        attackCooldown = 1.5;
-        attackType = 'melee';
+        attackRange = 1.5; attackDamage = 8 + wave * 2; attackCooldown = 1.5; attackType = 'melee';
     } else if (type === 'skeleton') {
-        attackRange = 12;
-        attackDamage = 5 + wave;
-        attackCooldown = 2.0;
-        attackType = 'ranged';
+        attackRange = 12; attackDamage = 5 + wave; attackCooldown = 2.0; attackType = 'ranged';
     } else if (type === 'wizard') {
-        attackRange = 10;
-        attackDamage = 12 + wave * 2;
-        attackCooldown = 3.0;
-        attackType = 'spell';
+        attackRange = 10; attackDamage = 12 + wave * 2; attackCooldown = 3.0; attackType = 'spell';
     } else if (type === 'dragon') {
-        attackRange = 20;
-        attackDamage = 25 + wave * 5;
-        attackCooldown = Math.max(2.0, 5.0 - wave * 0.3);
-        attackType = 'dragon_fire';
+        attackRange = 20; attackDamage = 25 + wave * 5; attackCooldown = Math.max(2.0, 5.0 - wave * 0.3); attackType = 'dragon_fire';
     }
 
     enemies.push({
@@ -797,34 +751,27 @@ function shootProjectile(tower, target) {
     let mesh;
     
     if (isArrow) {
-        // Arrow-shaped projectile
         const arrowGroup = new THREE.Group();
         const shaftGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6);
         const shaftMat = new THREE.MeshLambertMaterial({ color: 0x8d6e63 });
         const shaft = new THREE.Mesh(shaftGeo, shaftMat);
         shaft.rotation.x = Math.PI / 2;
         arrowGroup.add(shaft);
-        
         const tipGeo = new THREE.ConeGeometry(0.08, 0.15, 6);
         const tipMat = new THREE.MeshLambertMaterial({ color: 0x9e9e9e });
         const tip = new THREE.Mesh(tipGeo, tipMat);
         tip.position.z = 0.35;
         tip.rotation.x = Math.PI / 2;
         arrowGroup.add(tip);
-        
-        // Fletching
         const fletchGeo = new THREE.BoxGeometry(0.12, 0.02, 0.12);
         const fletchMat = new THREE.MeshLambertMaterial({ color: 0xd32f2f });
         const fletch = new THREE.Mesh(fletchGeo, fletchMat);
         fletch.position.z = -0.25;
         arrowGroup.add(fletch);
-        
         mesh = arrowGroup;
     } else if (type.splash) {
-        // Cannon ball
         mesh = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshLambertMaterial({ color: 0x212121 }));
     } else {
-        // Magic projectile
         mesh = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xcc00ff }));
     }
     
@@ -848,6 +795,11 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
     const time = clock.getElapsedTime();
+
+    if (gameState.isPaused) {
+        renderer.render(scene, camera);
+        return;
+    }
 
     handleCameraMovement(delta);
 
@@ -884,8 +836,12 @@ function animate() {
             scene.remove(enemy.mesh);
             enemies.splice(i, 1);
             if (gameState.lives <= 0) {
-                alert('Game Over! Refresh to restart.');
-                location.reload();
+                if (gameState.isStarted) {
+                    alert('Game Over! Refresh to restart.');
+                    location.reload();
+                } else {
+                    gameState.lives = 20; // Reset for splash screen demo
+                }
             }
             continue;
         }
@@ -900,6 +856,9 @@ function animate() {
             enemy.waypointIndex++;
         } else {
             enemy.mesh.position.add(dir.multiplyScalar(enemy.speed * delta));
+            if (enemy.type === 'dragon') {
+                enemy.mesh.position.y = 12;
+            }
             enemy.mesh.lookAt(new THREE.Vector3(targetWp.x, enemy.mesh.position.y, targetWp.z));
         }
 
@@ -922,30 +881,26 @@ function animate() {
         }
     });
 
-    // Update enemy attacks on towers
     for (const enemy of enemies) {
         enemy.attackTimer -= delta;
         if (enemy.attackTimer > 0) continue;
 
         if (enemy.attackType === 'melee') {
-            // Orc: damage adjacent towers
             for (const tower of towers) {
                 const dist = enemy.mesh.position.distanceTo(tower.mesh.position);
                 if (dist < enemy.attackRange + 0.5) {
                     tower.health -= enemy.attackDamage;
                     enemy.attackTimer = enemy.attackCooldown;
-                    // Flash tower red briefly
                     tower.mesh.children.forEach(c => {
                         if (c.material && c.material.emissive) {
                             c.material.emissive.setHex(0xff0000);
                             setTimeout(() => { if (c.material) c.material.emissive.setHex(0x000000); }, 100);
                         }
                     });
-                    break; // one target per attack
+                    break;
                 }
             }
         } else if (enemy.attackType === 'ranged') {
-            // Skeleton: shoot arrow at nearest tower
             let nearestTower = null;
             let nearestDist = enemy.attackRange;
             for (const tower of towers) {
@@ -954,7 +909,6 @@ function animate() {
             }
             if (nearestTower) {
                 enemy.attackTimer = enemy.attackCooldown;
-                // Create skeleton arrow projectile
                 const arrowGroup = new THREE.Group();
                 const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), new THREE.MeshLambertMaterial({ color: 0x8d6e63 }));
                 shaft.rotation.x = Math.PI / 2; arrowGroup.add(shaft);
@@ -972,11 +926,9 @@ function animate() {
                 });
             }
         } else if (enemy.attackType === 'spell') {
-            // Wizard: emanating spell, damage decreases with distance
             enemy.attackTimer = enemy.attackCooldown;
             const spellOrigin = enemy.mesh.position.clone();
             spellOrigin.y += 1.5;
-            // Create expanding ring visual
             const ringGeo = new THREE.TorusGeometry(0.3, 0.05, 6, 16);
             const ringMat = new THREE.MeshBasicMaterial({ color: 0xaa00ff, transparent: true, opacity: 0.8 });
             const spellRing = new THREE.Mesh(ringGeo, ringMat);
@@ -990,10 +942,9 @@ function animate() {
                 isHoming: false, isArrow: false,
                 isEnemyProjectile: true, isSpell: true,
                 origin: spellOrigin.clone(), maxRange: enemy.attackRange,
-                towers: [...towers] // snapshot towers at cast time
+                towers: [...towers]
             });
         } else if (enemy.attackType === 'dragon_fire') {
-            // Dragon: big fireball at nearest tower
             let nearestTower = null;
             let nearestDist = enemy.attackRange;
             for (const tower of towers) {
@@ -1002,7 +953,6 @@ function animate() {
             }
             if (nearestTower) {
                 enemy.attackTimer = enemy.attackCooldown;
-                // Dragon fireball
                 const fireball = new THREE.Mesh(
                     new THREE.SphereGeometry(0.3, 8, 8),
                     new THREE.MeshBasicMaterial({ color: 0xff4400 })
@@ -1010,7 +960,6 @@ function animate() {
                 fireball.position.copy(enemy.mesh.position);
                 fireball.position.y += 2.0;
                 scene.add(fireball);
-                // Fire trail
                 const trail = new THREE.Mesh(
                     new THREE.SphereGeometry(0.15, 6, 6),
                     new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6 })
@@ -1027,24 +976,21 @@ function animate() {
         }
     }
 
-    // Update projectiles (both friendly and enemy)
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
 
         if (p.isSpell) {
-            // Spell: expand ring, damage towers within range, damage decreases with distance
             const currentRadius = p.mesh.geometry.parameters?.radius || 0.3;
             const newRadius = currentRadius + p.speed * delta;
             p.mesh.geometry.dispose();
             p.mesh.geometry = new THREE.TorusGeometry(newRadius, 0.05, 6, 16);
             p.mesh.material.opacity = Math.max(0, 0.8 * (1 - newRadius / p.maxRange));
 
-            // Damage towers within ring
             const distFromOrigin = newRadius;
             const damageAtRange = p.damage * Math.max(0, 1 - distFromOrigin / p.maxRange);
             if (damageAtRange > 0.5) {
                 for (const tower of p.towers) {
-                    if (!towers.includes(tower)) continue; // tower already destroyed
+                    if (!towers.includes(tower)) continue;
                     const dist = tower.mesh.position.distanceTo(p.origin);
                     if (Math.abs(dist - newRadius) < 1.0) {
                         tower.health -= damageAtRange * delta * 3;
@@ -1078,10 +1024,8 @@ function animate() {
         
         if (dist < moveDist + 0.3) {
             if (p.isEnemyProjectile) {
-                // Enemy projectile hitting a tower
                 if (p.target && towers.includes(p.target)) {
                     if (p.splash && p.splashRadius) {
-                        // Dragon fireball splash
                         for (const tower of towers) {
                             const tDist = tower.mesh.position.distanceTo(targetPos);
                             if (tDist < p.splashRadius) {
@@ -1093,7 +1037,6 @@ function animate() {
                     }
                 }
             } else {
-                // Friendly projectile hitting an enemy
                 if (p.splash) {
                     enemies.forEach(e => {
                         if (e.mesh.position.distanceTo(targetPos) < 4) e.hp -= p.damage;
@@ -1108,7 +1051,6 @@ function animate() {
 
             scene.remove(p.mesh); projectiles.splice(i, 1);
 
-            // Check enemy deaths
             for (let j = enemies.length - 1; j >= 0; j--) {
                 if (enemies[j].hp <= 0) {
                     gameState.gold += enemies[j].reward;
@@ -1118,7 +1060,6 @@ function animate() {
                 }
             }
 
-            // Check tower destruction
             for (let j = towers.length - 1; j >= 0; j--) {
                 if (towers[j].health <= 0) {
                     scene.remove(towers[j].mesh);
@@ -1131,14 +1072,12 @@ function animate() {
             if (p.isArrow) {
                 p.mesh.lookAt(targetPos);
             }
-            // Dragon fireball glow effect
             if (p.isEnemyProjectile && p.splashRadius) {
                 p.mesh.material.color.setHex(Math.random() > 0.5 ? 0xff4400 : 0xffaa00);
             }
         }
     }
 
-    // Update tower health bars
     for (const tower of towers) {
         const hpRatio = Math.max(0, tower.health / tower.maxHealth);
         tower.hpBar.scale.x = hpRatio;
