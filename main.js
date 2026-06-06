@@ -102,12 +102,31 @@ function playSound(type) {
             osc.start(now); osc.stop(now + 0.4);
             break;
         case 'gameOver':
+            // Sad trombone "wah-wah-waaaah" fail music for when the castle falls
             osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(440, now);
-            osc.frequency.exponentialRampToValueAtTime(110, now + 0.5);
-            gain.gain.setValueAtTime(0.15, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-            osc.start(now); osc.stop(now + 0.6);
+            osc.frequency.setValueAtTime(350, now);
+            osc.frequency.linearRampToValueAtTime(330, now + 0.25);
+            osc.frequency.linearRampToValueAtTime(310, now + 0.5);
+            osc.frequency.linearRampToValueAtTime(180, now + 1.2);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.setValueAtTime(0.2, now + 0.5);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+            osc.start(now); osc.stop(now + 1.5);
+
+            // Add a slightly detuned second oscillator for an "out of tune" bad music effect
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.type = 'square';
+            osc2.frequency.setValueAtTime(360, now);
+            osc2.frequency.linearRampToValueAtTime(340, now + 0.25);
+            osc2.frequency.linearRampToValueAtTime(320, now + 0.5);
+            osc2.frequency.linearRampToValueAtTime(185, now + 1.2);
+            gain2.gain.setValueAtTime(0.1, now);
+            gain2.gain.setValueAtTime(0.1, now + 0.5);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.start(now); osc2.stop(now + 1.5);
             break;
         case 'click':
             osc.type = 'sine';
@@ -186,7 +205,9 @@ const gameState = {
     isStarted: false,
     isPaused: false,
     castleHP: 1000,
-    castleMaxHP: 1000
+    castleMaxHP: 1000,
+    baseWaveTimer: 45,
+    nextWaveTimer: 45 // Time in seconds until the next wave starts
 };
 
 // Camera control state
@@ -447,12 +468,12 @@ for (let i = 0; i < 120; i++) {
 
 // --- Tower Definitions ---
 const towerTypes = [
-    { name: 'Archer', cost: 25, range: 15, damage: 8, fireRate: 0.8, color: 0x8d6e63, projectileSpeed: 30, health: 50, antiDragon: false },
-    { name: 'Crossbow', cost: 100, range: 18, damage: 30, fireRate: 2.0, color: 0x757575, projectileSpeed: 35, splash: false, health: 80, antiDragon: false },
-    { name: 'Ballista', cost: 300, range: 25, damage: 80, fireRate: 2.5, color: 0x4e342e, projectileSpeed: 50, health: 100, antiDragon: false },
-    { name: 'Mage', cost: 500, range: 20, damage: 15, fireRate: 0.5, color: 0x9c27b0, projectileSpeed: 20, slow: true, health: 60, antiDragon: false },
-    { name: 'Sky Cannon', cost: 1500, range: 30, damage: 25, fireRate: 1.5, color: 0x00bcd4, projectileSpeed: 40, health: 70, antiDragon: true, level: 1 },
-    { name: 'Sky Cannon+', cost: 3000, range: 35, damage: 50, fireRate: 1.2, color: 0x0097a7, projectileSpeed: 45, health: 100, antiDragon: true, level: 2 }
+    { name: 'Archer', cost: 25, range: 15, damage: 5, fireRate: 1.0, color: 0x8d6e63, projectileSpeed: 30, health: 150, antiDragon: false },
+    { name: 'Crossbow', cost: 50, range: 30, damage: 25, fireRate: 4.0, color: 0x757575, projectileSpeed: 35, splash: false, health: 200, antiDragon: false },
+    { name: 'Ballista', cost: 100, range: 40, damage: 40, fireRate: 0.5, color: 0x4e342e, projectileSpeed: 50, health: 300, antiDragon: false },
+    { name: 'Mage', cost: 200, range: 30, damage: 25, fireRate: 1.5, color: 0x9c27b0, projectileSpeed: 20, slow: true, health: 300, antiDragon: false },
+    { name: 'Sky Cannon', cost: 300, range: 30, damage: 50, fireRate: 1.5, color: 0x00bcd4, projectileSpeed: 40, health: 200, antiDragon: true, level: 1 },
+    { name: 'Sky Cannon+', cost: 500, range: 35, damage: 100, fireRate: 1.0, color: 0x0097a7, projectileSpeed: 45, health: 500, antiDragon: true, level: 2 }
 ];
 let selectedTowerIndex = 0;
 
@@ -497,13 +518,48 @@ function handleCameraMovement(delta) {
 
 // --- UI ---
 const uiContainer = document.createElement('div');
-uiContainer.style.cssText = 'position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.7); padding:15px; border-radius:8px; font-family:sans-serif; font-size:14px; pointer-events:none; line-height:1.6; display:none; z-index:101;';
+uiContainer.style.cssText = 'position:absolute; top:10px; right:10px; color:white; background:rgba(0,0,0,0.7); padding:15px; border-radius:8px; font-family:sans-serif; font-size:14px; pointer-events:none; line-height:1.6; display:none; z-index:101; text-align: right;';
 document.body.appendChild(uiContainer);
 const towerBar = document.createElement('div');
 towerBar.style.cssText = 'position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:none; gap:8px; pointer-events:auto; z-index:101;';
 document.body.appendChild(towerBar);
 const splashScreen = document.getElementById('splash-screen');
 const pauseScreen = document.getElementById('pause-screen');
+
+const nextWaveContainer = document.createElement('div');
+nextWaveContainer.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:10px; z-index:101;';
+document.body.appendChild(nextWaveContainer);
+
+const nextWaveTimerEl = document.createElement('div');
+nextWaveTimerEl.style.cssText = 'color:white; background:rgba(0,0,0,0.7); padding:10px 20px; border-radius:8px; font-family:sans-serif; font-size:18px; font-weight:bold; display:none; text-align: center;';
+nextWaveContainer.appendChild(nextWaveTimerEl);
+
+const nextWaveButton = document.createElement('button');
+nextWaveButton.innerText = 'Send Wave Now';
+nextWaveButton.style.cssText = 'background:#ff9800; color:white; border:none; padding:10px 15px; border-radius:8px; font-family:sans-serif; font-size:14px; font-weight:bold; cursor:pointer; display:none;';
+nextWaveButton.onmouseover = () => { nextWaveButton.style.background = '#ffb74d'; };
+nextWaveButton.onmouseout = () => { nextWaveButton.style.background = '#ff9800'; };
+nextWaveButton.onclick = () => {
+    if (gameState.isStarted && !gameState.isPaused) {
+        advanceWave();
+        playSound('click');
+    }
+};
+nextWaveContainer.appendChild(nextWaveButton);
+
+function advanceWave() {
+    if (gameState.wave >= 6) {
+        gameState.baseWaveTimer = Math.max(15, gameState.baseWaveTimer - 5);
+    }
+    gameState.wave++;
+    gameState.gold += 30;
+    gameState.enemiesRemainingToSpawn = 8 + Math.floor(gameState.wave * 3);
+    gameState.nextWaveTimer = gameState.baseWaveTimer;
+    gameState.spawnTimer = 0;
+    playSound('waveStart');
+    playWaveSting();
+    updateUI();
+}
 
 function resetGame() {
     for (const enemy of enemies) scene.remove(enemy.mesh);
@@ -521,6 +577,8 @@ function resetGame() {
     gameState.isStarted = true;
     gameState.isPaused = false;
     gameState.castleHP = gameState.castleMaxHP;
+    gameState.baseWaveTimer = 45;
+    gameState.nextWaveTimer = 45;
     updateUI();
 }
 
@@ -592,7 +650,7 @@ window.addEventListener('mousemove', (e) => {
             const isTown = (gx >= 2 && gx <= 12 && gz >= 60 && gz <= 74);
             const towerType = towerTypes[selectedTowerIndex];
             let canBuild = !isPathCell && !occupied && !isCastle && !isTown && gameState.gold >= towerType.cost;
-            if (canBuild && !towerType.antiDragon) {
+            if (canBuild) {
                 canBuild = isAdjacentToPath(gx, gz);
             }
             previewMesh.material.color.setHex(canBuild ? 0x00ff00 : 0xff0000);
@@ -694,25 +752,55 @@ window.addEventListener('mousedown', (e) => {
 
 // --- Dragon color/level based on wave ---
 function getDragonLevel(wave) {
-    if (wave <= 3) return { color: materials.green, hp: 200 + wave * 50, damage: 20, name: 'green' };
-    if (wave <= 6) return { color: materials.blue, hp: 400 + wave * 50, damage: 40, name: 'blue' };
-    if (wave <= 9) return { color: materials.yellow, hp: 600 + wave * 50, damage: 60, name: 'yellow' };
-    if (wave <= 12) return { color: materials.orange, hp: 800 + wave * 50, damage: 80, name: 'orange' };
-    return { color: materials.red, hp: 1200 + wave * 50, damage: Math.ceil(gameState.castleMaxHP / 3), name: 'red' };
+    if (wave < 6) return { color: materials.green, hp: 100, damage: 20, name: 'green' };
+    
+    const series = Math.floor((wave - 6) / 5) + 1;
+    const waveInSeries = (wave - 6) % 5;
+    const cIndex = Math.min(waveInSeries, 4);
+    
+    const colors = [materials.green, materials.blue, materials.yellow, materials.orange, materials.red];
+    const colorNames = ['green', 'blue', 'yellow', 'orange', 'red'];
+    
+    let hp = 100 + wave * 50;
+    let damage = 20 + cIndex * 20 + wave * 5;
+    
+    if (cIndex === 4) {
+        // Red dragon is the boss, scales to be a serious threat
+        damage = Math.max(50, Math.ceil(gameState.castleMaxHP / (6 - series)));
+        hp = 100 + wave * 100;
+    }
+    
+    return { color: colors[cIndex], hp: hp, damage: damage, name: colorNames[cIndex] };
 }
 
 // --- Enemy Spawning ---
 function spawnEnemy() {
     const wave = gameState.wave;
     let type = 'orc';
-    let hp = 40 + wave * 8;
+    let hp = 20 + wave * 2;
     let speed = 3.2 + wave * 0.12;
     let reward = 10;
     let color = materials.green;
 
-    if (wave >= 2 && Math.random() < 0.5) { type = 'skeleton'; hp = 60 + wave * 10; speed = 4.0; reward = 15; color = materials.white; }
-    if (wave >= 4 && Math.random() < 0.35) { type = 'wizard'; hp = 120 + wave * 18; speed = 2.8; reward = 30; color = materials.purple; }
-    if (wave >= 6 && gameState.enemiesRemainingToSpawn === 1) { type = 'dragon'; const dl = getDragonLevel(wave); hp = dl.hp; speed = 2.5 + wave * 0.08; reward = 100; color = dl.color; }
+    // Dragon series logic
+    let dragonsPerWave = 0;
+    if (wave >= 6) {
+        const series = Math.floor((wave - 6) / 5) + 1;
+        dragonsPerWave = series;
+    }
+
+    if (wave >= 6 && dragonsPerWave > 0 && gameState.enemiesRemainingToSpawn <= dragonsPerWave && gameState.enemiesRemainingToSpawn > 0) {
+        type = 'dragon';
+        const dl = getDragonLevel(wave);
+        hp = dl.hp;
+        speed = 2.5 + wave * 0.08;
+        reward = 500 * dragonsPerWave;
+        color = dl.color;
+    } else if (wave >= 2 && Math.random() < 0.5) { 
+        type = 'skeleton'; hp = 30 + wave * 5; speed = 4.0; reward = 20; color = materials.white; 
+    } else if (wave >= 4 && Math.random() < 0.1) { 
+        type = 'wizard'; hp = 60 + wave * 5; speed = 2.8; reward = 50; color = materials.purple; 
+    }
 
     const enemyGroup = new THREE.Group();
     const size = type === 'dragon' ? 1.8 : 1;
@@ -763,9 +851,9 @@ function spawnEnemy() {
     scene.add(enemyGroup);
 
     let attackRange = 0, attackDamage = 0, attackCooldown = 0, attackType = 'none';
-    if (type === 'orc') { attackRange = 1.5; attackDamage = 10 + Math.floor(wave * 2.5); attackCooldown = 1.0; attackType = 'melee'; }
-    else if (type === 'skeleton') { attackRange = 14; attackDamage = 8 + Math.floor(wave * 1.5); attackCooldown = 1.5; attackType = 'ranged'; }
-    else if (type === 'wizard') { attackRange = 12; attackDamage = 18 + Math.floor(wave * 2.5); attackCooldown = 2.0; attackType = 'spell'; }
+    if (type === 'orc') { attackRange = 1.5; attackDamage = 5 + Math.floor(wave * 2.5); attackCooldown = 1.0; attackType = 'melee'; }
+    else if (type === 'skeleton') { attackRange = 14; attackDamage = 4 + Math.floor(wave * 1.5); attackCooldown = 1.5; attackType = 'ranged'; }
+    else if (type === 'wizard') { attackRange = 12; attackDamage = 15 + Math.floor(wave * 2.5); attackCooldown = 2.0; attackType = 'spell'; }
     else if (type === 'dragon') {
         const dl = getDragonLevel(wave);
         attackRange = 25; attackDamage = dl.damage; attackCooldown = Math.max(1.0, 3.0 - wave*0.15); attackType = 'dragon_fire';
@@ -822,26 +910,42 @@ function animate() {
     const delta = Math.min(clock.getDelta(), 0.1);
     const time = clock.getElapsedTime();
 
+    // Update next wave timer UI
+    if (gameState.isStarted && !gameState.isPaused) {
+        nextWaveTimerEl.style.display = 'block';
+        nextWaveButton.style.display = 'block';
+        nextWaveTimerEl.innerText = `NEXT WAVE IN: ${Math.ceil(Math.max(0, gameState.nextWaveTimer))}`;
+    } else {
+        nextWaveTimerEl.style.display = 'none';
+        nextWaveButton.style.display = 'none';
+    }
+
     if (gameState.isPaused) { renderer.render(scene, camera); return; }
     handleCameraMovement(delta);
 
     // Wave management
-    if (!gameState.isWaveActive && gameState.enemiesRemainingToSpawn === 0 && enemies.length === 0) {
-        if (time % 5 < 0.02 || gameState.wave === 1) {
-            gameState.isWaveActive = true;
-            gameState.enemiesRemainingToSpawn = 8 + Math.floor(gameState.wave * 3);
-            playSound('waveStart');
-            playWaveSting();
-        }
+    if (!gameState.isWaveActive && gameState.wave === 1 && gameState.isStarted) {
+        gameState.isWaveActive = true;
+        gameState.enemiesRemainingToSpawn = 8 + Math.floor(gameState.wave * 3);
+        gameState.nextWaveTimer = gameState.baseWaveTimer;
+        playSound('waveStart');
+        playWaveSting();
     }
+
     if (gameState.isWaveActive && gameState.enemiesRemainingToSpawn > 0) {
         gameState.spawnTimer -= delta;
-        if (gameState.spawnTimer <= 0) { spawnEnemy(); gameState.enemiesRemainingToSpawn--; gameState.spawnTimer = gameState.spawnInterval; }
-    } else if (gameState.isWaveActive && gameState.enemiesRemainingToSpawn === 0 && enemies.length === 0) {
-        gameState.isWaveActive = false;
-        gameState.wave++;
-        gameState.gold += 30;
-        updateUI();
+        if (gameState.spawnTimer <= 0) { 
+            spawnEnemy(); 
+            gameState.enemiesRemainingToSpawn--; 
+            gameState.spawnTimer = gameState.spawnInterval; 
+        }
+    }
+
+    if (gameState.isWaveActive) {
+        gameState.nextWaveTimer -= delta;
+        if (gameState.nextWaveTimer <= 0) {
+            advanceWave();
+        }
     }
 
     // Update enemies
@@ -857,18 +961,10 @@ function animate() {
             if (wingL) wingL.rotation.z = 0.15 + Math.sin(enemy.wingPhase) * 0.5;
             if (wingR) wingR.rotation.z = -0.15 - Math.sin(enemy.wingPhase) * 0.5;
 
-            enemy.dragonFlightTimer -= delta;
-            if (!enemy.dragonFlightTarget || enemy.dragonFlightTimer <= 0) {
-                if (Math.random() < 0.4) {
-                    enemy.dragonFlightTarget = new THREE.Vector3(75.5, 12, 50);
-                } else {
-                    enemy.dragonFlightTarget = new THREE.Vector3(
-                        5 + Math.random() * 70,
-                        10 + Math.random() * 8,
-                        5 + Math.random() * 70
-                    );
-                }
-                enemy.dragonFlightTimer = 3 + Math.random() * 4;
+            // Dragon should stop within firing range of the castle and keep attacking from that range
+            if (!enemy.dragonFlightTarget) {
+                // Set initial target to be at firing range (distance ~20) from the castle, not over it
+                enemy.dragonFlightTarget = new THREE.Vector3(55, 12, 50);
             }
 
             const dir = new THREE.Vector3().subVectors(enemy.dragonFlightTarget, enemy.mesh.position);
@@ -883,8 +979,10 @@ function animate() {
             enemy.mesh.position.x = Math.max(2, Math.min(GRID_SIZE - 2, enemy.mesh.position.x));
             enemy.mesh.position.z = Math.max(2, Math.min(GRID_SIZE - 2, enemy.mesh.position.z));
             enemy.mesh.position.y = Math.max(8, Math.min(20, enemy.mesh.position.y));
-            const lookTarget = enemy.mesh.position.clone().add(dir);
-            enemy.mesh.lookAt(lookTarget.x, enemy.mesh.position.y, lookTarget.z);
+            
+            // Always look at the castle so shots are aimed correctly
+            const castlePos = new THREE.Vector3(75.5, enemy.mesh.position.y, 50);
+            enemy.mesh.lookAt(castlePos.x, enemy.mesh.position.y, castlePos.z);
         } else {
             const targetWp = waypoints[enemy.waypointIndex + 1];
             if (!targetWp) {
@@ -941,8 +1039,14 @@ function animate() {
             enemy.attackTimer = enemy.attackCooldown;
             const mouthPos = new THREE.Vector3(0, 2.1 * enemy.size, 2.2 * enemy.size);
             mouthPos.applyMatrix4(enemy.mesh.matrixWorld);
-            const forward = new THREE.Vector3();
-            enemy.mesh.getWorldDirection(forward);
+            
+            // Aim directly at the castle to ensure shots hit from range
+            const castlePos = new THREE.Vector3(75.5, 1.5, 50);
+            const aimTarget = castlePos.clone();
+            aimTarget.y += 6.0; // Aim higher to compensate for gravity arc over distance
+            
+            const aimDir = new THREE.Vector3().subVectors(aimTarget, mouthPos).normalize();
+            
             const fireballMesh = new THREE.Mesh(
                 new THREE.SphereGeometry(0.3, 8, 8),
                 new THREE.MeshBasicMaterial({ color: 0xff6600 })
@@ -951,7 +1055,7 @@ function animate() {
             scene.add(fireballMesh);
             projectiles.push({
                 mesh: fireballMesh,
-                velocity: forward.multiplyScalar(25),
+                velocity: aimDir.multiplyScalar(45), // Increased speed to reach castle before dropping too much
                 damage: enemy.attackDamage,
                 life: 4.0,
                 isDragonFireball: true
